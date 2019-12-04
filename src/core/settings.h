@@ -147,6 +147,8 @@ struct Values {
     bool vsync_enabled;
     bool use_frame_limit;
     u16 frame_limit;
+    u16 texture_filter_factor;
+    std::string texture_filter_name;
 
     LayoutOption layout_option;
     bool swap_screen;
