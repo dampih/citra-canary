@@ -121,6 +121,14 @@ use_disk_shader_cache =
 # factor for the 3DS resolution
 resolution_factor =
 
+# Texture filter name and scale factor
+texture_filter_name =
+texture_filter_factor =
+
+# Whether to enable V-Sync (caps the framerate at 60FPS) or not.
+# 0 (default): Off, 1: On
+vsync_enabled =
+
 # Turns on the frame limiter, which will limit frames output to the target game speed
 # 0: Off, 1: On (default)
 use_frame_limit =
