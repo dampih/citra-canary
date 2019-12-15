@@ -34,6 +34,7 @@
 #include "video_core/renderer_opengl/gl_rasterizer_cache.h"
 #include "video_core/renderer_opengl/gl_state.h"
 #include "video_core/renderer_opengl/gl_vars.h"
+#include "video_core/renderer_opengl/texture_filters/texture_filter_manager.h"
 #include "video_core/utils.h"
 #include "video_core/video_core.h"
 
@@ -41,12 +42,6 @@ namespace OpenGL {
 
 using SurfaceType = SurfaceParams::SurfaceType;
 using PixelFormat = SurfaceParams::PixelFormat;
-
-struct FormatTuple {
-    GLint internal_format;
-    GLenum format;
-    GLenum type;
-};
 
 static constexpr std::array<FormatTuple, 5> fb_format_tuples = {{
     {GL_RGBA8, GL_RGBA, GL_UNSIGNED_INT_8_8_8_8},     // RGBA8
@@ -74,9 +69,7 @@ static constexpr std::array<FormatTuple, 4> depth_format_tuples = {{
     {GL_DEPTH24_STENCIL8, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8}, // D24S8
 }};
 
-static constexpr FormatTuple tex_tuple = {GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE};
-
-static const FormatTuple& GetFormatTuple(PixelFormat pixel_format) {
+const FormatTuple& GetFormatTuple(PixelFormat pixel_format) {
     const SurfaceType type = SurfaceParams::GetFormatType(pixel_format);
     if (type == SurfaceType::Color) {
         ASSERT(static_cast<std::size_t>(pixel_format) < fb_format_tuples.size());
@@ -317,8 +310,8 @@ static constexpr std::array<void (*)(u32, u32, u8*, PAddr, PAddr, PAddr), 18> gl
 };
 
 // Allocate an uninitialized texture of appropriate size and format for the surface
-static void AllocateSurfaceTexture(GLuint texture, const FormatTuple& format_tuple, u32 width,
-                                   u32 height) {
+void AllocateSurfaceTexture(GLuint texture, const FormatTuple& format_tuple, u32 width,
+                            u32 height) {
     OpenGLState cur_state = OpenGLState::GetCurState();
 
     // Keep track of previous texture bindings
@@ -366,9 +359,9 @@ static void AllocateTextureCube(GLuint texture, const FormatTuple& format_tuple,
     cur_state.Apply();
 }
 
-static bool BlitTextures(GLuint src_tex, const Common::Rectangle<u32>& src_rect, GLuint dst_tex,
-                         const Common::Rectangle<u32>& dst_rect, SurfaceType type,
-                         GLuint read_fb_handle, GLuint draw_fb_handle) {
+bool BlitTextures(GLuint src_tex, const Common::Rectangle<u32>& src_rect, GLuint dst_tex,
+                  const Common::Rectangle<u32>& dst_rect, SurfaceType type, GLuint read_fb_handle,
+                  GLuint draw_fb_handle) {
     OpenGLState prev_state = OpenGLState::GetCurState();
     SCOPE_EXIT({ prev_state.Apply(); });
 
@@ -1493,6 +1486,14 @@ Surface RasterizerCacheOpenGL::GetTextureSurface(
 
 Surface RasterizerCacheOpenGL::GetTextureSurface(const Pica::Texture::TextureInfo& info,
                                                  u32 max_level) {
+    auto [texture_filter, filter_scale_factor, delete_cache] =
+        TextureFilterManager::GetInstance().GetTextureFilter();
+    if (delete_cache) {
+        FlushAll();
+        while (!surface_cache.empty())
+            UnregisterSurface(*surface_cache.begin()->second.begin());
+    }
+
     if (info.physical_address == 0) {
         return nullptr;
     }
@@ -1611,6 +1612,19 @@ Surface RasterizerCacheOpenGL::GetTextureSurface(const Pica::Texture::TextureInf
         }
     }
 
+    if (surface->res_scale == 1 && texture_filter) {
+        SurfaceParams upscale_params = params;
+        upscale_params.res_scale = filter_scale_factor;
+
+        Surface upscaled_surface = CreateSurface(upscale_params);
+        upscaled_surface->invalid_regions.clear();
+        RegisterSurface(upscaled_surface);
+        remove_surfaces.emplace(surface);
+
+        texture_filter->scale(surface, upscaled_surface);
+
+        return upscaled_surface;
+    }
     return surface;
 }
 

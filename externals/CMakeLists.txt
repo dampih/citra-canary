@@ -66,6 +66,9 @@ endif()
 add_subdirectory(zstd/build/cmake EXCLUDE_FROM_ALL)
 target_include_directories(libzstd_static INTERFACE ./zstd/lib)
 
+# xBRZ
+add_subdirectory(xbrz)
+
 # ENet
 add_subdirectory(enet)
 target_include_directories(enet INTERFACE ./enet/include)

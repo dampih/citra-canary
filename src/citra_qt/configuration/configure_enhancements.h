@@ -23,6 +23,7 @@ public:
 
 private:
     void updateShaders(bool anaglyph);
+    void updateTextureFilter(const QString&);
 
     Ui::ConfigureEnhancements* ui;
     QColor bg_color;
